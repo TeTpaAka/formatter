@@ -28,11 +28,11 @@ local image = testform:image({
 	image = "formatter_inlay_dark_beige_92x78.png"
 })
 image:set_style("text_align", "topleft")
-local label = image:label({
-	text = "This is a long text with automatic word wrapping. This is a long text with automatic word wrapping. This is a long text with automatic word wrapping."
-
+local input = image:input({
+	text = "\tThis is a long text with automatic word wrapping. This is a long text with automatic word wrapping. This is a long text with automatic word wrapping."
 })
-label:set_margin(5, 5)
+input:set_background_color("#000000")
+input:set_margin(5, 5)
 
 image = testform:image({
 	x = 4,

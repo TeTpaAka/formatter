@@ -24,6 +24,7 @@ local gui_element = {}
 --local container = {}
 local window = {}
 local button = {}
+local input = {}
 --local grid = {}
 local inventory = {}
 
@@ -64,77 +65,57 @@ function gui_element:visible()
 	end
 end
 
-function gui_element:generate_style(result)
+function gui_element:generate_style(element)
 	if self.aspect then
-		table_insert(result, "aspect[")
-		table_insert(result, self.aspect.x)
-		table_insert(result, ",")
-		table_insert(result, self.aspect.y)
-		table_insert(result, "]")
+		element.aspect = {
+			x = self.aspect.x,
+			y = self.aspect.y
+		}
 	end
 	if self.style then
+		element.style = {}
 		for k,v in pairs(self.style) do
-			table_insert(result, "style[")
-			table_insert(result, k)
-			table_insert(result, ",")
-			table_insert(result, v)
-			table_insert(result, "]")
+			element.style[k] = v
 		end
 	end
 	if self.bgcolor then
-		table_insert(result, "bgcolor[")
-		table_insert(result, self.bgcolor)
-		table_insert(result, "]")
+		element.bgcolor = self.bgcolor
 	end
 	if self.img then
-		table_insert(result, "image[")
-		table_insert(result, self.img)
-		table_insert(result, "]")
+		element.image = self.img
 	end
 	if self.text then
-		table_insert(result, "text[")
-		table_insert(result, self.text)
-		table_insert(result, "]")
+		element.text = self.text
 	end
 end
 
-function gui_element:generate_beginrect(result)
+function gui_element:generate_rect(element)
 	local rect = {
-		x1 = self.x,
-		y1 = self.y,
-		x2 = self.x + self.width,
-		y2 = self.y + self.height
+		x0 = self.x,
+		y0 = self.y,
+		x1 = self.x + self.width,
+		y1 = self.y + self.height
 	}
 	if self.margin then
-		rect.x1 = rect.x1 + self.margin.x
-		rect.y1 = rect.y1 + self.margin.y
-		rect.x2 = rect.x2 - self.margin.x
-		rect.y2 = rect.y2 - self.margin.y
+		rect.x0 = rect.x0 + self.margin.x
+		rect.y0 = rect.y0 + self.margin.y
+		rect.x1 = rect.x1 - self.margin.x
+		rect.y1 = rect.y1 - self.margin.y
 	end
-	table_insert(result, "beginrect[")
-	table_insert(result, rect.x1)
-	table_insert(result, ",")
-	table_insert(result, rect.y1)
-	table_insert(result, ",")
-	table_insert(result, rect.x2)
-	table_insert(result, ",")
-	table_insert(result, rect.y2)
-	table_insert(result, "]")
-	self:generate_style(result)
+	self:generate_style(element)
+	element.rect = rect;
 end
 
 function gui_element:generate(result, x, y, width, height)
-	if self:visible() then
-		self:generate_beginrect(result)
-	end
+	local element = {}
+	self:generate_rect(element)
 	if self.content then
 		for _,c in pairs(self.content) do
-			c:generate(result, x, y, width, height)
+			c:generate(element, x, y, width, height)
 		end
 	end
-	if self:visible() then
-		table_insert(result, "endrect[]")
-	end
+	result.children = result.children or {}
+	table_insert(result.children, element)
 end
 
 function gui_element:set_pos(x, y) 
@@ -215,6 +196,23 @@ function gui_element:button(spec)
 	return obj
 end
 
+function gui_element:input(spec)
+	self.content = self.content or {}
+	local obj = {
+		x = spec.x or 0,
+		y = spec.y or 0,
+		width = spec.width or self.absoluteWidth or 1,
+		height = spec.height or self.absoluteHeight or 1,
+		text = spec.text,
+		name = spec.name or ""
+	}
+	fix_absolute_rect(self, obj)
+	setmetatable(obj, input)
+
+	table.insert(self.content, obj)
+	return obj
+end
+
 function gui_element:image(spec)
 	self.content = self.content or {}
 	local obj = {
@@ -254,7 +252,7 @@ setmetatable(window, gui_element)
 function window:generate()
 	local result = {}
 	gui_element.generate(self, result, self.x, self.y, self.width, self.height)
-	return table_concat(result)
+	return minetest.write_json(result.children[1])
 end
 
 -- button
@@ -262,11 +260,23 @@ button.__index = button
 setmetatable(button, gui_element)
 
 function button:generate(result, x, y, width, height)
-	self:generate_beginrect(result)
-	table_insert(result, "button[")
-	table_insert(result, self.name)
-	table_insert(result, "]")
-	table_insert(result, "endrect[]")
+	local element = {}
+	self:generate_rect(element)
+	element.type = "button"
+	result.children = result.children or {}
+	table_insert(result.children, element)
+end
+
+-- input
+input.__index = input
+setmetatable(input, gui_element)
+
+function input:generate(result, x, y, width, height)
+	local element = {}
+	self:generate_rect(element)
+	element.type = "input"
+	result.children = result.children or {}
+	table_insert(result.children, element)
 end
 
 -- grid
@@ -308,19 +318,13 @@ inventory.__index = inventory
 setmetatable(inventory, gui_element)
 
 function inventory:generate(result)
-	self:generate_beginrect(result)
-	table_insert(result, "inventory[")
-	table_insert(result, self.location)
-	table_insert(result, ",")
-	table_insert(result, self.list)
-	table_insert(result, ",")
-	table_insert(result, self.columns)
-	table_insert(result, ",")
-	table_insert(result, self.rows)
-	table_insert(result, ",")
-	table_insert(result, starting)
-	table_insert(result, "]")
-	table_insert(result, "endrect[]")
+	local element = {}
+	self:generate_rect(element)
+	element.type = "inventory"
+	element.rows = self.rows
+	element.columns = self.columns
+	result.children = result.children or {}
+	table_insert(result.children, element)
 end
 
 -- api functions
